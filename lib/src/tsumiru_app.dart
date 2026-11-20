@@ -27,6 +27,7 @@ import 'features/settings/presentation/incognito/incognito_mode.dart';
 import 'features/settings/widgets/app_theme_mode_tile/app_theme_mode_tile.dart';
 import 'global_providers/global_providers.dart';
 import 'l10n/generated/app_localizations.dart';
+import 'routes/reader_link.dart';
 import 'routes/router_config.dart';
 import 'utils/extensions/custom_extensions.dart';
 import 'utils/launch_url_in_web.dart';
@@ -101,6 +102,21 @@ class TsumiruApp extends HookConsumerWidget {
           });
       return null;
     }, const []);
+
+    // Reader links (tsumiru://manga/<id>/chapter/<id>) go through the router on screen, like notification taps.
+    useEffect(() {
+      void openPending() {
+        final location = pendingReaderLink.value;
+        if (location == null) return;
+        pendingReaderLink.value = null;
+        debugPrint('Deep link: opening $location');
+        routes.go(location);
+      }
+
+      openPending();
+      pendingReaderLink.addListener(openPending);
+      return () => pendingReaderLink.removeListener(openPending);
+    }, [routes]);
 
     final themeMode = ref.watch(appThemeModeProvider);
     final appLocale = ref.watch(l10nProvider);
