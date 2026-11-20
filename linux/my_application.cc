@@ -123,6 +123,13 @@ static void configure_composited_window(GtkWindow* window, GdkScreen* screen) {
 // Implements GApplication::activate.
 static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
+  // One instance: a second launch (e.g. `tsumiru tsumiru://manga/1/chapter/2`)
+  // raises the open window and hands its arguments to it (gtk package).
+  GList* windows = gtk_application_get_windows(GTK_APPLICATION(application));
+  if (windows) {
+    gtk_window_present(GTK_WINDOW(windows->data));
+    return;
+  }
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
 
@@ -196,7 +203,9 @@ static gboolean my_application_local_command_line(GApplication* application, gch
   g_application_activate(application);
   *exit_status = 0;
 
-  return TRUE;
+  // FALSE: GApplication goes on to emit "command-line" on the primary
+  // instance, which the gtk package forwards to app_links (reader links).
+  return FALSE;
 }
 
 // Implements GObject::dispose.
@@ -217,6 +226,6 @@ static void my_application_init(MyApplication* self) {}
 MyApplication* my_application_new() {
   return MY_APPLICATION(g_object_new(my_application_get_type(),
                                      "application-id", APPLICATION_ID,
-                                     "flags", G_APPLICATION_NON_UNIQUE,
+                                     "flags", G_APPLICATION_HANDLES_COMMAND_LINE | G_APPLICATION_HANDLES_OPEN,
                                      nullptr));
 }

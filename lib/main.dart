@@ -59,6 +59,7 @@ import 'src/features/tracking/data/tracker_oauth_browser_stub.dart'
     if (dart.library.js_interop)
         'src/features/tracking/data/tracker_oauth_browser_web.dart';
 import 'src/global_providers/global_providers.dart';
+import 'src/routes/reader_link.dart';
 import 'src/routes/router_config.dart';
 import 'src/tsumiru_app.dart';
 import 'src/utils/crash/crash_log.dart';
@@ -468,6 +469,12 @@ void _setupDeepLinkListener(ProviderContainer Function() currentContainer) {
     final container = currentContainer();
     final current = container.read(authCredentialsStoreProvider.notifier).captureSession();
     if (!current()) return;
+    // tsumiru://manga/<id>[/chapter/<id>]: a series or a chapter opened from outside the app.
+    final readerLocation = readerLinkLocation(uri);
+    if (readerLocation != null) {
+      container.read(routerConfigProvider).go(readerLocation);
+      return;
+    }
     try {
       final toast = container.read(toastProvider);
       final outcome = await container.read(trackerOAuthProvider).handleCallback(uri);
