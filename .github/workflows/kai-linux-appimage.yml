@@ -1,5 +1,5 @@
 # Kai's fork only (never part of an upstream PR). Every day: if Suwayomi released a new Tsumiru, or the
-# reader-link patches changed, build the latest official release + the patches from `deep-links` as a
+# reader-link and Living Ink patches changed, build the latest official release + the patches from `deep-links` as a
 # Linux AppImage and publish it as a release here (`<upstream tag>-kai-<patch sha>`, marked latest).
 # `tsumiru-update` on Kai's PCs installs it. If the patches no longer apply, this fails (GitHub emails
 # the owner); once upstream has the feature itself, it says so and stops: switch to the official build.
@@ -90,7 +90,7 @@ jobs:
           flutter pub get
           flutter gen-l10n
           dart run build_runner build --delete-conflicting-outputs
-          flutter test test/src/routes/reader_link_test.dart
+          flutter test test/src/routes/reader_link_test.dart test/src/utils/theme/living_ink_test.dart
       - name: Build the AppImage (AppRun passes the link on)
         if: steps.plan.outputs.skip != 'true'
         env:
