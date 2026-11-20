@@ -4,7 +4,13 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import 'package:flutter/foundation.dart';
+
 import 'router_config.dart';
+
+/// A reader link waiting for the app's router: set where the link arrives, taken by the app (which owns the router
+/// on screen) as soon as it is built, so a link that starts the app is opened too.
+final pendingReaderLink = ValueNotifier<String?>(null);
 
 /// The in-app location for a reader link, or null when [uri] isn't one.
 ///
