@@ -471,7 +471,6 @@ void _setupDeepLinkListener(ProviderContainer Function() currentContainer) {
     if (!current()) return;
     // tsumiru://manga/<id>[/chapter/<id>]: a series or a chapter opened from outside the app.
     final readerLocation = readerLinkLocation(uri);
-    debugPrint('Deep link received: $uri (reader location: $readerLocation)');
     if (readerLocation != null) {
       pendingReaderLink.value = readerLocation;
       return;
