@@ -118,6 +118,9 @@ jobs:
         run: |
           tag="${{ steps.plan.outputs.tag }}"
           gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag 2>/dev/null || true
-          gh release create "$tag" out/*.AppImage --repo "$GITHUB_REPOSITORY" --target "$(git rev-parse HEAD)" \
+          # the build commit (official tag + patches) exists only here: push it as the release tag first
+          git tag -f "$tag" HEAD
+          git push -f origin "refs/tags/$tag"
+          gh release create "$tag" out/*.AppImage --repo "$GITHUB_REPOSITORY" --verify-tag \
             --latest --title "Tsumiru ${{ steps.plan.outputs.up_tag }} + reader links" \
             --notes "Official ${{ steps.plan.outputs.up_tag }} + the reader-link patches from deep-links (tsumiru://manga/<id>/chapter/<id>). Installed by tsumiru-update on Kai's PCs."
