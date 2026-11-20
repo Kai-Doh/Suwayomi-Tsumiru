@@ -1,24 +1,81 @@
-# Kai's fork only (never part of an upstream PR): a Linux AppImage of this branch, as a workflow
-# artifact. Same steps as release-fork.yml's Linux job, without the release/zsync repack (an
-# update from upstream's releases would drop the fork's changes).
+# Kai's fork only (never part of an upstream PR). Every day: if Suwayomi released a new Tsumiru, or the
+# reader-link patches changed, build the latest official release + the patches from `deep-links` as a
+# Linux AppImage and publish it as a release here (`<upstream tag>-kai-<patch sha>`, marked latest).
+# `tsumiru-update` on Kai's PCs installs it. If the patches no longer apply, this fails (GitHub emails
+# the owner); once upstream has the feature itself, it says so and stops: switch to the official build.
 name: Kai Linux AppImage
 
 on:
+  schedule:
+    - cron: "17 5 * * *"
   workflow_dispatch:
+    inputs:
+      force:
+        description: Rebuild even if this release exists
+        type: boolean
+        default: false
   push:
     branches: [kai-build]
+
+permissions:
+  contents: write
 
 jobs:
   appimage:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Latest official release + our patches
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git remote add upstream https://github.com/Suwayomi/Suwayomi-Tsumiru.git
+          git fetch -q upstream --tags main
+          git fetch -q origin deep-links
+          up_tag="$(gh release view --repo Suwayomi/Suwayomi-Tsumiru --json tagName -q .tagName)"
+          patches="$(git rev-list --reverse --no-merges upstream/main..origin/deep-links)"
+          patch_sha="$(git rev-parse --short=7 origin/deep-links)"
+          tag="${up_tag}-kai-${patch_sha}"
+          echo "upstream=$up_tag patches=$(echo "$patches" | wc -w) tag=$tag"
+          if git cat-file -e "${up_tag}:lib/src/routes/reader_link.dart" 2>/dev/null; then
+            echo "::notice::Official $up_tag already has reader links: switch to the official Tsumiru and retire this fork."
+          fi
+          # Nothing new (this release exists): skip, unless started by hand with force or by a push here.
+          skip=false
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            case "${{ github.event_name }}/${{ inputs.force }}" in
+              push/*|workflow_dispatch/true) ;;
+              *) skip=true; echo "$tag is already built: nothing to do" ;;
+            esac
+          fi
+          {
+            echo "up_tag=$up_tag"; echo "tag=$tag"; echo "skip=$skip"
+            echo "patches<<EOF"; echo "$patches"; echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+      - name: Apply the patches on the official release
+        if: steps.plan.outputs.skip != 'true'
+        env:
+          PATCHES: ${{ steps.plan.outputs.patches }}
+          UP_TAG: ${{ steps.plan.outputs.up_tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -q -B build "$UP_TAG"
+          for c in $PATCHES; do
+            git cherry-pick -x "$c" || { echo "::error::Patch $c no longer applies on $UP_TAG: rebase deep-links"; exit 1; }
+          done
+          git log --oneline -6
       - uses: subosito/flutter-action@v2
+        if: steps.plan.outputs.skip != 'true'
         with:
           flutter-version-file: .fvmrc
           channel: stable
           cache: true
       - name: Install Linux build deps
+        if: steps.plan.outputs.skip != 'true'
         run: |
           opts="-o Acquire::Retries=3 -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25"
           sudo apt-get $opts update
@@ -26,12 +83,16 @@ jobs:
             clang cmake ninja-build pkg-config \
             libgtk-3-dev libx11-dev libblkid-dev liblzma-dev \
             libsecret-1-dev libjsoncpp-dev libavif-dev
-      - run: flutter config --enable-linux-desktop
-      - run: flutter pub get
-      - run: flutter gen-l10n
-      - run: dart run build_runner build --delete-conflicting-outputs
-      - run: flutter test test/src/routes/reader_link_test.dart
-      - name: Build Linux AppImage
+      - name: Generate, test
+        if: steps.plan.outputs.skip != 'true'
+        run: |
+          flutter config --enable-linux-desktop
+          flutter pub get
+          flutter gen-l10n
+          dart run build_runner build --delete-conflicting-outputs
+          flutter test test/src/routes/reader_link_test.dart
+      - name: Build the AppImage (AppRun passes the link on)
+        if: steps.plan.outputs.skip != 'true'
         env:
           APPIMAGE_EXTRACT_AND_RUN: "1"
           TSUMIRU_BUNDLE_AVIF_DEPS: "1"
@@ -43,10 +104,20 @@ jobs:
           dart pub global activate fastforge
           export PATH="$PATH:$HOME/.pub-cache/bin"
           fastforge package --platform linux --targets appimage
+          mv "$(find dist -name '*.AppImage' | head -1)" ./fastforge-input.AppImage
+          ./fastforge-input.AppImage --appimage-extract > /dev/null
+          sed -i 's|^exec ./tsumiru$|exec ./tsumiru "$@"|' squashfs-root/AppRun
+          grep -q 'exec ./tsumiru "\$@"' squashfs-root/AppRun || { cat squashfs-root/AppRun; exit 1; }
+          chmod -R a+rX squashfs-root && chmod a+rx squashfs-root/AppRun
           mkdir -p out
-          mv "$(find dist -name '*.AppImage' | head -1)" "out/tsumiru-kai-${GITHUB_SHA::7}-linux-x86_64.AppImage"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: tsumiru-kai-linux-appimage
-          path: out/*.AppImage
-          retention-days: 30
+          appimagetool squashfs-root "out/tsumiru-${{ steps.plan.outputs.tag }}-linux-x86_64.AppImage"
+      - name: Publish the release
+        if: steps.plan.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ steps.plan.outputs.tag }}"
+          gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$tag" out/*.AppImage --repo "$GITHUB_REPOSITORY" --target "$(git rev-parse HEAD)" \
+            --latest --title "Tsumiru ${{ steps.plan.outputs.up_tag }} + reader links" \
+            --notes "Official ${{ steps.plan.outputs.up_tag }} + the reader-link patches from deep-links (tsumiru://manga/<id>/chapter/<id>). Installed by tsumiru-update on Kai's PCs."
