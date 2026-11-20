@@ -9,11 +9,7 @@ import 'oklch_contrast.dart';
 import 'theme_tokens.dart';
 
 /// The [ColorScheme] a theme uses at [brightness]; Custom is seed-derived.
-ColorScheme schemeFor(
-  AppTheme theme,
-  Brightness brightness,
-  Color customSeed,
-) {
+ColorScheme schemeFor(AppTheme theme, Brightness brightness, Color customSeed) {
   if (theme != AppTheme.custom) {
     return schemeFromTokens(tokensFor(theme, brightness), brightness);
   }
@@ -39,11 +35,17 @@ ThemeData buildAppTheme({
   required Brightness brightness,
   required Color customSeed,
   required bool amoled,
+  // Kai's fork: Living Ink's colours of the moment take the place of the named theme's (utils/theme/living_ink.dart).
+  ThemeTokens? tokensOverride,
 }) {
-  final tokens = theme == AppTheme.custom ? null : tokensFor(theme, brightness);
-  ColorScheme scheme = schemeFor(theme, brightness, customSeed);
+  final tokens =
+      tokensOverride ??
+      (theme == AppTheme.custom ? null : tokensFor(theme, brightness));
+  ColorScheme scheme = tokensOverride != null
+      ? schemeFromTokens(tokensOverride, brightness)
+      : schemeFor(theme, brightness, customSeed);
 
-  if (brightness == Brightness.dark && amoled) {
+  if (brightness == Brightness.dark && amoled && tokensOverride == null) {
     scheme = applyAmoled(scheme);
   }
 

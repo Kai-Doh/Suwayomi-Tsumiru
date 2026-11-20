@@ -34,6 +34,7 @@ import 'utils/launch_url_in_web.dart';
 import 'utils/misc/toast/toast.dart';
 import 'utils/motion/reduce_motion.dart';
 import 'utils/theme/app_theme_builder.dart';
+import 'utils/theme/living_ink.dart';
 import 'widgets/desktop/desktop_page_frame.dart';
 import 'widgets/desktop/desktop_window_scaffold.dart';
 import 'widgets/web_page_title.dart';
@@ -123,6 +124,8 @@ class TsumiruApp extends HookConsumerWidget {
     final appTheme = ref.watch(appThemeKeyProvider) ?? AppTheme.indigoNight;
     final customSeed = ref.watch(customThemeColorProvider);
     final isTrueBlack = ref.watch(isTrueBlackProvider).ifNull();
+    // Kai's fork: while Living Ink is the desktop theme, its colours of the moment and paper grain, live
+    final ink = ref.watch(livingInkProvider).value;
     applyForcePortrait(ref.watch(forcePortraitProvider).ifNull());
     return MaterialApp.router(
       builder: (context, child) {
@@ -132,31 +135,36 @@ class TsumiruApp extends HookConsumerWidget {
               ? wideScreenScrollbarTheme(Theme.of(context).colorScheme)
               : const ScrollbarThemeData(),
           child: ReduceMotionScope(
-            child: DesktopWindowScaffold(
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Offstage(
-                    offstage: sessionChanging,
-                    child: TickerMode(
-                      enabled: !sessionChanging,
-                      child: ReauthBannerHost(
-                        child: kIsWeb
-                            ? _WebTitleBridge(
-                                routes: routes,
-                                child: _IncognitoNotificationBridge(
+            child: LivingInkGrain(
+              ink: ink,
+              child: DesktopWindowScaffold(
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Offstage(
+                      offstage: sessionChanging,
+                      child: TickerMode(
+                        enabled: !sessionChanging,
+                        child: ReauthBannerHost(
+                          child: kIsWeb
+                              ? _WebTitleBridge(
+                                  routes: routes,
+                                  child: _IncognitoNotificationBridge(
+                                    child: toastWrapped,
+                                  ),
+                                )
+                              : _IncognitoNotificationBridge(
                                   child: toastWrapped,
                                 ),
-                              )
-                            : _IncognitoNotificationBridge(child: toastWrapped),
+                        ),
                       ),
                     ),
-                  ),
-                  if (sessionChanging)
-                    const Scaffold(
-                      body: Center(child: CircularProgressIndicator()),
-                    ),
-                ],
+                    if (sessionChanging)
+                      const Scaffold(
+                        body: Center(child: CircularProgressIndicator()),
+                      ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -169,14 +177,19 @@ class TsumiruApp extends HookConsumerWidget {
         brightness: Brightness.light,
         customSeed: Color(customSeed ?? 0xFF7C7BFF),
         amoled: false,
+        tokensOverride: ink != null && ink.light ? ink.tokens : null,
       ),
       darkTheme: buildAppTheme(
         theme: appTheme,
         brightness: Brightness.dark,
         customSeed: Color(customSeed ?? 0xFF7C7BFF),
         amoled: isTrueBlack,
+        tokensOverride: ink != null && !ink.light ? ink.tokens : null,
       ),
-      themeMode: themeMode ?? ThemeMode.system,
+      themeMode: ink != null
+          ? (ink.light ? ThemeMode.light : ThemeMode.dark)
+          : themeMode ?? ThemeMode.system,
+      themeAnimationDuration: const Duration(milliseconds: 1200),
       scrollBehavior: const AppScrollBehavior(),
       localizationsDelegates: const [
         AppLocalizations.delegate,
