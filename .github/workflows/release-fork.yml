@@ -244,6 +244,10 @@ jobs:
           # fastforge embeds no update info, so repack for delta updates.
           mv "dist/${pkg_name}-${{ github.ref_name }}-linux-x86_64.AppImage" ./fastforge-input.AppImage
           ./fastforge-input.AppImage --appimage-extract > /dev/null
+          # fastforge's AppRun drops the command line (`exec ./tsumiru`): pass it on, so
+          # `tsumiru tsumiru://manga/1/chapter/2` reaches the app (reader links).
+          sed -i 's|^exec ./tsumiru$|exec ./tsumiru "$@"|' squashfs-root/AppRun
+          grep -q 'exec ./tsumiru "\$@"' squashfs-root/AppRun || { echo "::error::AppRun doesn't pass arguments"; cat squashfs-root/AppRun; exit 1; }
           chmod -R a+rX squashfs-root
           chmod a+rx squashfs-root/AppRun
           appimagetool -u "gh-releases-zsync|Suwayomi|Suwayomi-Tsumiru|latest|tsumiru-*-linux-x86_64.AppImage.zsync" \
