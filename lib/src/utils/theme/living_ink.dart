@@ -91,14 +91,37 @@ final livingInkProvider = StreamProvider<LivingInk?>((ref) async* {
     }
   }
 
-  // (a stat every 3 s: the file changes a few times an hour, when the engine applies new colours)
-  while (true) {
-    final stamp = file.existsSync() ? file.lastModifiedSync() : DateTime(0);
-    if (stamp != seen) {
-      seen = stamp;
-      yield read();
+  // Woken the moment the file is written (an inotify watch on its folder), so the app turns with the desktop's
+  // day/night wave instead of up to 3 s after it (Kai 2026-11-25: "my tsumiru app doesn't update following the
+  // wave"); a stat every 3 s stays as the fallback (no folder yet, a watch that failed).
+  Completer<void>? wake;
+  void poke() {
+    final w = wake;
+    if (w != null && !w.isCompleted) w.complete();
+  }
+
+  bool isOurs(FileSystemEvent e) =>
+      e.path == file.path || (e is FileSystemMoveEvent && e.destination == file.path);
+  StreamSubscription<FileSystemEvent>? sub;
+  try {
+    if (file.parent.existsSync()) {
+      sub = file.parent.watch().listen((e) {
+        if (isOurs(e)) poke();
+      }, onError: (Object _) {});
     }
-    await Future<void>.delayed(const Duration(seconds: 3));
+  } catch (_) {}
+  try {
+    while (true) {
+      final stamp = file.existsSync() ? file.lastModifiedSync() : DateTime(0);
+      if (stamp != seen) {
+        seen = stamp;
+        yield read();
+      }
+      wake = Completer<void>();
+      await Future.any<void>([wake!.future, Future<void>.delayed(const Duration(seconds: 3))]);
+    }
+  } finally {
+    await sub?.cancel();
   }
 });
 
